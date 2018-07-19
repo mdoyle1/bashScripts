@@ -1,2 +1,2 @@
 # bashScripts
-# bashScripts
+Practing and learning...
