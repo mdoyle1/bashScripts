@@ -7,9 +7,9 @@ oldPrinters=(
 )
 
 newPrinters=(
-#new IP 1 
-#new IP 2
-#new IP 3
+#new Jamf Printer ID
+#new Jamf Printer ID
+#new Jamf Printer ID
 )
 
 
