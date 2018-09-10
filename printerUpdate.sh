@@ -17,7 +17,7 @@ newPrinters=(
 for (( i=0; i< ${#oldPrinters[@]}; i++ ))
 
 do
-printer=$(lpstat -v | grep lpd://${oldPrinters[$i]} | awk '{print $3}' | tr -d :)
+printer=$(lpstat -v | awk '{print $3}' | tr -d :)
 	if [[ -z "$printer" ]]; then 
 	echo Printer Doesn\'t Exist!
 		else 
