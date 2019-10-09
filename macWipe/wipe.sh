@@ -1,8 +1,10 @@
 #!/bin/bash
 
 # Mac Wipe
+# For keeping inventory of surplused macs...
 
 # These directions assume you have a USB stick named WIPE with wipe.sh and you are wired to the campus network!
+# If you arn't wired or the computer doesn't have the SMBFS Library loaded the log will be saved to your USB.
 
 # Directions:
 #	1. Wire computer to the network
@@ -12,11 +14,16 @@
 #	5. Enter the following command in terminal: cd /Volumes/Wipe
 #	6. Run wipe.sh from the current directory: . wipe.sh
 #	7. Follow the directions from the script!
-
+	
+#	
+# If SMB is not functioning the wipe log will be stored on the USB.
+# You will have to upload the log to ecsu-group2/data_center/common/wipelogs
+# The log will be named as the computers serial #
+# 
 # Example
 # -bash-3.2# cd /Volumes/Wipe
 # -bash-3.2# . wipe.sh
-serverLocation="YOUR SERVER GOES HERE"
+	
 dateStamp=$(date +%B" "%d", "%Y)
 serialNumber=$(ioreg -l | grep IOPlatformSerialNumber |  awk '{print $4}' | sed 's/.//;s/.$//' ) 
 eraseMethod="Single-pass zeros"
@@ -25,7 +32,19 @@ diskSize=$(diskutil info disk0 | grep "Disk Size")
 diskType=$(diskutil info disk0 | grep "Solid State")
 diskName=$(diskutil info disk0 | grep "Device / Media Name")
 
-echo Welcome to Mac Wipe! Make sure you are wired to the network...
+function clear(){
+for i in {0..100}
+do
+	echo 
+	done
+}
+clear
+echo Welcome to Mac Wipe!
+echo This script will wipe the Mac and save the log to the following smb location...
+echo smb://ecsu-group2/data_center/common/wipelogs
+echo If SMB is not available the log will be stored on the USB.
+echo
+echo
 echo Enter your computer\'s Z-Tag.
 
 #GET Z-TAG INFO
@@ -44,47 +63,77 @@ do
 done
 
 #LOGIN WITH ERROR CHECKING
-
+clear
 echo Please enter your credentials...
+
+
 function login (){
+	
 	read -p "Username: " uservar
 	read -sp "Password: " passvar
-	echo 
-	mount -t smbfs "//$uservar:$passvar@$serverLocation" ./
+	mkdir /Volumes/WipeLogs
+	echo TRYING to run MOUNT_SMBFS....
+	mount_smbfs "//$uservar:$passvar@ecsu-group2/data_center/common/wipelogs" /Volumes/WipeLogs
 	returnCode=$?
 }
 
 login
+
 z=0
+smb=0
+computer=0
+
+#Check and set the switches..
 while [ $z == 0 ]
 do
+	#If you enter the wrong credentials...
 	if [[ $returnCode == 64 ]] 
 	then
-	umount //$uservar@ecsu-group2/data_center/common/wipelogs 
-	mount -t smbfs "//$uservar:$passvar@$serverLocation" ./
+	#umount //$uservar@ecsu-group2/data_center/common/wipelogs 
+	mount_smbfs "//$uservar:$passvar@ecsu-group2/data_center/common/wipelogs" /Volumes/WipeLogs
 	z=1
-		elif [[ $returnCode != 0 ]]
+	#If the computer doesn't have SMBFS library loaded...
+		elif [[ $returnCode == 133 ]]
 		then
-		echo Please re-enter your credentials...
-		login
+		rm -rf /Volumes/WipeLogs
+		echo 
+		echo SMB Framework not available! storing wipe log on usb...
+		echo 
+		z=1
+		smb=1
+		computer=1
+			# If error is unaccounted for...
+			elif [[ $returnCode != 133 || $returnCode != 64 ]]
+				then
+				clear
+				echo Please re-enter your credentials...
+				clear
+				login
 			else
 			z=1
 fi
 done
 
 #DISK WIPE
-
-echo "Wiping disk, Secure Erase will take up to 4 hours."
+function wipe(){
+clear
 directory=$(pwd)
 echo Current Directory: $directory
+echo Prepairing to erase: $macintoshHD
 eraseStarted=$(date)
-standard=$(diskutil eraseDisk JHFS+ Macintosh\ HD disk0)
+standard=$(diskutil eraseVolume JHFS+ Macintosh\ HD /dev/disk0s2)
 echo $standard
-echo
-echo Standard Erase Complete!
+echo %%%%%%%%%%%%%%%%%%%%%%%%%%
+echo %Standard Erase Complete!%
+echo %%%%%%%%%%%%%%%%%%%%%%%%%%
+eraseFinished=$(date)
+clear
 y=0
+if [[ computer == 0 ]]
+then
 while [ $y == 0 ]
 do
+	echo "Wiping disk, Secure Erase will take up to 4 hours."
 	read -p "Proceed with Secure Erase, Y or N? " -n 1 -r
 	echo    # (optional) move to a new line
 	if [[ $REPLY =~ ^[Yy]$ ]]
@@ -97,8 +146,43 @@ do
 	fi
 done
 eraseFinished=$(date)
-echo Erase Complete! Generating Log...
+clear
+echo ..................................
+echo -Erase Complete! Generating Log...
+echo ----------------------------------
+fi
+}
 
+function logCreated(){
+echo @@@@@ Wipe Complete @@@@@
+echo @ Log has been created! @
+echo @@@@@@@@@@@@@@@@@@@@@@@@@
+}
+
+function disMount(){
+clear
+echo ==================================================================
+echo Log has been uploaded to ecsu-group2/data_center/common/wipelogs!
+echo ==================================================================
+clear
+mountLocation=$(df | grep "ecsu-group2/data_center/common/wipelogs" | awk '{print $1}')
+cd / 
+umount $mountLocation
+}
+
+if [[ smb == 0 ]]
+then
+wipe
+disMount
+logCreated
+	else 
+	cd /Volumes/Wipe
+    wipe
+	logCreated
+	echo Please upload the file to ecsu-group2/data_center/common/wipelogs
+fi
+		
+	
 #CREATE RTF LOG
 
 cat >> $serialNumber.rtf <<EOF
@@ -149,9 +233,5 @@ Started: $eraseStarted\\
 Erase Finished: $eraseFinished\\
 \\
 Wiped By: 
-\f1\b0 $uservar}
+\f1\b0 $uservar@easternct.edu}
 EOF
-echo Log has been uploaded to $serverLocation!
-mountLocation=$(df | grep "$serverLocation" | awk '{print $1}')
-cd / 
-umount $mountLocation
